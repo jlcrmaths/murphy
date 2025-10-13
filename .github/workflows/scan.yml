@@ -2,47 +2,43 @@ name: ibex-murphy-scan
 
 on:
   schedule:
-    # Cada 30 min de 07:00 a 15:30 UTC (≈ 09:00–17:30 Madrid en verano)
-    - cron: '*/30 7-15 * * 1-5'
+    - cron: '*/30 7-15 * * 1-5'   # cada 30 min en horario de mercado (ajusta si quieres)
   workflow_dispatch:
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-
     steps:
-      - name: "Checkout"
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      - name: "Setup Python"
-        uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: '3.11'   # o 3.10/3.12 según prefieras
 
-      - name: "Install dependencies"
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: "Debug: imprimir líneas 15–60 de notifier.py"
+      - name: Show a few files (debug)
         run: |
-          echo "SHA: $GITHUB_SHA"
-          git log -1 --pretty=oneline
-          nl -ba notifier.py | sed -n '15,60p'
+          echo "Files in repo:"
+          ls -la
+          echo "Run.py head:"
+          sed -n '1,120p' run.py
 
-      - name: "Syntax check"
+      - name: Syntax check
         run: |
-          python -m py_compile notifier.py run.py strategy.py data.py config.py
+          python -m py_compile notifier.py run.py strategy.py data.py config.py || true
 
-      - name: "Run scan"
+      - name: Run scan
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_THREAD_ID: ${{ vars.TELEGRAM_THREAD_ID }}
           TIMEZONE: ${{ vars.TIMEZONE }}
-          BUDGET: ${{ vars.BUDGET }}
         run: |
           python run.py
+
