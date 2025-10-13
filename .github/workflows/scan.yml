@@ -2,122 +2,42 @@ name: ibex-murphy-scan
 
 on:
   schedule:
-    # Cada 30 min de 07:00 a 15:30 UTC (≈ 09:00–17:30 Madrid en horario de verano)
+    # Cada 30 min de 07:00 a 15:30 UTC (≈ 09:00–17:30 Madrid en verano)
     - cron: '*/30 7-15 * * 1-5'
   workflow_dispatch:
-    inputs:
-      hotfix_notifier:
-        description: 'Sobrescribir notifier.py con una versión segura (true/false) — solo para emergencias'
-        required: false
-        default: 'false'
-
-permissions: read-all
 
 jobs:
   scan:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: "Checkout"
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Setup Python
+      - name: "Setup Python"
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install deps
+      - name: "Install dependencies"
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # --- DEBUG: confirma qué archivo real está usando el runner ---
-      - name: Debug: commit y contenido real de notifier.py
+      - name: "Debug: imprimir líneas 15–60 de notifier.py"
         run: |
           echo "SHA: $GITHUB_SHA"
           git log -1 --pretty=oneline
-          echo "----- notifier.py (líneas 15–60) -----"
           nl -ba notifier.py | sed -n '15,60p'
-          echo "--------------------------------------"
 
-      # --- HOTFIX (OPCIONAL): solo si lo pides al lanzar manualmente el workflow) ---
-      - name: Hotfix notifier.py (temporal, solo si hotfix_notifier=true)
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.hotfix_notifier == 'true' }}
-        shell: bash
-        run: |
-          cat > notifier.py <<'PY'
-          # -*- coding: utf-8 -*-
-          import requests
-          from typing import Dict
-          from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_THREAD_ID
-
-          API_URL = "https://api.telegram.org/bot{token}/{method}"
-
-          def send_telegram_message(text: str) -> None:
-              if TELEGRAM_BOT_TOKEN.startswith('PON_AQUI') or TELEGRAM_CHAT_ID.startswith('PON_AQUI'):
-                  print('[Aviso] Configura TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (secrets/entorno).')
-                  print(text)
-                  return
-
-              payload = {
-                  'chat_id': TELEGRAM_CHAT_ID,
-                  'text': text,
-                  'parse_mode': 'Markdown'
-              }
-              # Publicar en un tema (topic) de supergrupo (opcional)
-              if TELEGRAM_THREAD_ID is not None:
-                  payload['message_thread_id'] = TELEGRAM_THREAD_ID
-
-              try:
-                  r = requests.post(
-                      API_URL.format(token=TELEGRAM_BOT_TOKEN, method='sendMessage'),
-                      data=payload,
-                      timeout=20
-                  )
-                  if r.status_code != 200:
-                      print('[Telegram] Error:', r.text)
-              except Exception as e:
-                  print('[Telegram] Excepción:', e)
-
-          def format_alert(ticker: str, signal: Dict) -> str:
-              """
-              Construye el texto de la alerta:
-              - ticker, hora
-              - entrada, TP (arriba), SL (abajo)
-              - nº de acciones y riesgo/acción
-              - ventana temporal (min_exit, max_exit) si viene en signal
-              """
-              min_exit = signal.get('min_exit')
-              max_exit = signal.get('max_exit')
-              min_exit_txt = '' if not min_exit else '\nNo cerrar antes de: `{}`'.format(min_exit)
-              max_exit_txt = '' if not max_exit else '\nCerrar como tarde: `{}`'.format(max_exit)
-
-              return (
-                  '*Señal LONG* en *{}*\n'.format(ticker) +
-                  'Hora: `{}`\n'.format(signal['timestamp']) +
-                  'Entrada: `{}`\n'.format(signal['entry']) +
-                  'TP (arriba): `{}`\n'.format(signal['tp']) +
-                  'SL (abajo): `{}`\n'.format(signal['sl']) +
-                  'Nº acciones (presupuesto): `{}`\n'.format(signal['shares']) +
-                  'Riesgo/acción: `{}`'.format(signal['risk_per_share']) +
-                  min_exit_txt + max_exit_txt + '\n'
-              )
-          PY
-          echo "[Hotfix] notifier.py sobrescrito en el runner."
-          echo "----- notifier.py (líneas 15–60) tras hotfix -----"
-          nl -ba notifier.py | sed -n '15,60p'
-          echo "--------------------------------------------------"
-
-      # --- Freno temprano si hay un problema de sintaxis ---
-      - name: Verificación de sintaxis Python
+      - name: "Syntax check"
         run: |
           python -m py_compile notifier.py run.py strategy.py data.py config.py
 
-      # --- Ejecución del escaneo ---
-      - name: Run scan
+      - name: "Run scan"
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
