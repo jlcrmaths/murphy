@@ -10,19 +10,21 @@ def send_telegram_message(text: str) -> None:
         print('[Aviso] Configura TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (secrets/entorno).')
         print(text)
         return
+
     payload = {
         'chat_id': TELEGRAM_CHAT_ID,
         'text': text,
         'parse_mode': 'Markdown'
     }
-    # Publicar dentro de un tema (topic) de un supergrupo (opcional)
+    # Publicar en un tema (topic) de supergrupo (opcional)
     if TELEGRAM_THREAD_ID is not None:
         payload['message_thread_id'] = TELEGRAM_THREAD_ID
 
     try:
         r = requests.post(
             API_URL.format(token=TELEGRAM_BOT_TOKEN, method='sendMessage'),
-            data=payload, timeout=20
+            data=payload,
+            timeout=20
         )
         if r.status_code != 200:
             print('[Telegram] Error:', r.text)
@@ -31,12 +33,11 @@ def send_telegram_message(text: str) -> None:
 
 def format_alert(ticker: str, signal: Dict) -> str:
     """
-    Construye el texto de la alerta con:
-    - ticker
-    - timestamp
+    Construye el texto de la alerta:
+    - ticker, hora
     - entrada, TP (arriba), SL (abajo)
-    - nº acciones y riesgo/acción
-    - ventana temporal: no cerrar antes de (2h) / cerrar como tarde (2d) si viene en signal
+    - nº de acciones y riesgo/acción
+    - ventana temporal (min_exit, max_exit) si viene en signal
     """
     min_exit = signal.get('min_exit')
     max_exit = signal.get('max_exit')
