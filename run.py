@@ -14,8 +14,8 @@ PAUSE_SEC = 0.35  # Pausa entre tickers para evitar rate limits
 
 
 def within_market_hours(dt_local: datetime) -> bool:
-    """Comprueba si estamos dentro del horario de mercado."""
-    if dt_local.weekday() > 4:  # sábado o domingo
+    """Devuelve True si está dentro del horario de mercado."""
+    if dt_local.weekday() > 4:
         return False
     h_open = datetime.strptime(MARKET_OPEN, '%H:%M').time()
     h_close = datetime.strptime(MARKET_CLOSE, '%H:%M').time()
@@ -23,7 +23,7 @@ def within_market_hours(dt_local: datetime) -> bool:
 
 
 def load_universe() -> list:
-    """Carga la lista de tickers desde el archivo o usa los valores por defecto."""
+    """Carga el universo de tickers desde archivo o usa los valores por defecto."""
     try:
         with open(UNIVERSE_FILE, 'r', encoding='utf-8') as f:
             tickers = [line.strip() for line in f if line.strip() and not line.startswith('#')]
@@ -35,35 +35,31 @@ def load_universe() -> list:
 
 
 def scan_once():
-    """Escanea una vez todos los tickers y envía señales si las hay."""
-    try:
-        tz = pytz.timezone(TIMEZONE)
-    except Exception:
-        print(f"[Error] Zona horaria inválida: '{TIMEZONE}', usando Europe/Madrid")
-        tz = pytz.timezone('Europe/Madrid')
-
+    tz = pytz.timezone(TIMEZONE)
     now_local = datetime.now(tz)
-    if not within_market_hours(now_local):
-        print('[Info] Fuera de horario de mercado. Hora local:', now_local.strftime('%Y-%m-%d %H:%M:%S'))
-        return
 
-    print(f"[Info] Escaneo iniciado a las {now_local.strftime('%H:%M:%S')} ({TIMEZONE})")
+    if not within_market_hours(now_local):
+        print('[Info] Fuera de horario de mercado. Hora local:', now_local)
+        return
 
     for ticker in load_universe():
         try:
             print(f"[Info] Escaneando {ticker} ...")
             df = download_bars(ticker)
             if df is None or df.empty:
-                print(f"[Advertencia] {ticker}: sin datos recientes.")
+                print(f"[Advertencia] {ticker}: sin datos.")
                 time.sleep(PAUSE_SEC)
                 continue
 
             last_close = float(df['close'].iloc[-1])
+            print(f"[Debug] Último cierre de {ticker}: {last_close} €")
+
             if last_close >= TEN_EUROS:
-                print(f"[Info] {ticker}: último cierre {last_close:.2f} €, omitido (>=10€).")
+                print(f"[Info] {ticker}: precio > 10 €, se omite.")
                 time.sleep(PAUSE_SEC)
                 continue
 
+            # Llamar a la estrategia para generar señal
             signal = generate_signal(df)
             if signal:
                 ts = pd.to_datetime(signal['timestamp'])
@@ -76,28 +72,16 @@ def scan_once():
                 signal['max_exit'] = max_exit
 
                 msg = format_alert(ticker, signal)
+                print(f"[ALERTA] {msg}")
                 send_telegram_message(msg)
-                print(f"[ALERTA] Señal detectada en {ticker}: {signal}")
-
+            else:
+                print(f"[Info] {ticker}: sin señal.")
         except Exception as e:
             print(f"[Error] {ticker}: {e}")
-
         finally:
             time.sleep(PAUSE_SEC)
 
-    print("[Info] Escaneo completado.\n")
-
-
-def main_loop(interval_minutes=10):
-    """Ejecuta el escaneo cada cierto tiempo mientras el mercado esté abierto."""
-    print(f"[Info] Modo continuo iniciado. Intervalo: {interval_minutes} minutos.\n")
-    while True:
-        scan_once()
-        print(f"[Info] Esperando {interval_minutes} minutos antes del próximo escaneo...\n")
-        time.sleep(interval_minutes * 60)
-
 
 if __name__ == '__main__':
-    # Puedes elegir entre ejecutar una sola vez o en bucle
-    # scan_once()
-    main_loop(interval_minutes=10)
+    scan_once()
+
