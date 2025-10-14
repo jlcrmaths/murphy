@@ -1,72 +1,49 @@
 # -*- coding: utf-8 -*-
 """
-Módulo data.py (versión estable)
---------------------------------
-Descarga datos históricos de cotización usando Yahoo Finance (gratuito)
-y los devuelve en formato normalizado para el bot.
+data.py — Descarga de cotizaciones bursátiles desde Yahoo Finance
+Compatible con ibex_murphy_bot_github_v5
 """
 
-import pandas as pd
 import yfinance as yf
+import pandas as pd
+
+# Puedes ajustar estos valores si lo necesitas
+DEFAULT_PERIOD = "6mo"
+DEFAULT_INTERVAL = "1d"
 
 
-def download_bars(ticker: str, days: int = 180, interval: str = "1d") -> pd.DataFrame:
+def download_bars(ticker: str, period: str = DEFAULT_PERIOD, interval: str = DEFAULT_INTERVAL):
     """
-    Descarga los datos de cotización de un ticker usando Yahoo Finance.
-
-    Args:
-        ticker (str): Código del valor, por ejemplo 'CABK.MC'.
-        days (int): Días de histórico a descargar (por defecto 180).
-        interval (str): Intervalo entre datos ('1d', '1h', etc.).
-
-    Returns:
-        pd.DataFrame o None: DataFrame con columnas ['timestamp','open','high','low','close','volume'].
+    Descarga los datos históricos de un ticker usando Yahoo Finance.
+    Devuelve un DataFrame con columnas: timestamp, open, high, low, close, volume
     """
     try:
-        period = f"{days}d"
-        df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
+        df = yf.download(ticker, period=period, interval=interval, progress=False)
 
         if df is None or df.empty:
-            print(f"[Advertencia] {ticker}: sin datos descargados.")
+            print(f"[Advertencia] {ticker}: sin datos recientes.")
             return None
 
-        # Aplana columnas si vienen con MultiIndex (por ejemplo ('Close', ''))
+        # Si las columnas tienen MultiIndex, las aplanamos
         if isinstance(df.columns, pd.MultiIndex):
-            df.columns = [col[0].lower() for col in df.columns]
+            df.columns = [c[0].lower() for c in df.columns]
         else:
-            df.columns = [col.lower() for col in df.columns]
+            df.columns = [c.lower() for c in df.columns]
 
-        # Asegura que las columnas principales existan
-        required_cols = ['open', 'high', 'low', 'close', 'volume']
-        for col in required_cols:
-            if col not in df.columns:
-                print(f"[Error] {ticker}: falta columna '{col}' en los datos.")
-                return None
+        # Convierte la columna 'close' en una Serie 1D (evita el error ndarray)
+        df['close'] = df['close'].squeeze()
 
-        # Convierte arrays 2D a Series 1D
-        for c in required_cols:
-            df[c] = df[c].squeeze()
-
-        # Convertimos el índice a columna si no existe 'date' o 'timestamp'
-        if 'date' in df.columns:
-            df.rename(columns={'date': 'timestamp'}, inplace=True)
-        elif 'datetime' in df.columns:
-            df.rename(columns={'datetime': 'timestamp'}, inplace=True)
-        else:
-            # Si la fecha está en el índice, la convertimos
+        # Si no hay índice de fecha, lo añadimos
+        if not isinstance(df.index, pd.DatetimeIndex):
             df = df.reset_index()
-            # Detectamos si la columna se llama "Date" o "Datetime"
-            if 'Date' in df.columns:
-                df.rename(columns={'Date': 'timestamp'}, inplace=True)
-            elif 'Datetime' in df.columns:
-                df.rename(columns={'Datetime': 'timestamp'}, inplace=True)
-            else:
-                # Si no existe ninguna, asumimos que la primera columna es la fecha
-                df.rename(columns={df.columns[0]: 'timestamp'}, inplace=True)
 
-        # Normalizamos formato final
-        df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
-        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+        # Creamos la columna timestamp (si no existe)
+        if 'timestamp' not in df.columns:
+            df = df.rename(columns={'date': 'timestamp'})
+
+        # Nos quedamos solo con las columnas importantes
+        cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        df = df[[c for c in cols if c in df.columns]]
 
         return df
 
@@ -75,13 +52,15 @@ def download_bars(ticker: str, days: int = 180, interval: str = "1d") -> pd.Data
         return None
 
 
-# 🧪 Prueba manual
+# 🔹 Bloque de prueba directa (solo se ejecuta si lanzas este archivo manualmente)
 if __name__ == "__main__":
-    ticker = "SAN.MC"  # Banco Santander
-    df = download_bars(ticker)
-    if df is not None:
-        print(df.head())
-        print(f"\n{ticker}: {len(df)} registros descargados correctamente.")
-    else:
-        print(f"No se pudieron obtener datos para {ticker}.")
+    tickers = ["CABK.MC", "SAN.MC", "TEF.MC", "REP.MC"]
+    for t in tickers:
+        print(f"[Info] Descargando {t} ...")
+        df = download_bars(t)
+        if df is not None:
+            print(f"{t}: {len(df)} registros descargados correctamente.")
+            print(df.tail(3))  # mostramos las últimas 3 filas
+        print("-" * 60)
+
 
