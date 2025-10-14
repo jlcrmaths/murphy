@@ -9,7 +9,7 @@ from data import download_bars
 from strategy import generate_signal
 from notifier import send_telegram_message, format_alert
 
-TEN_EUROS = 10.0
+TEN_EUROS = 25.0
 PAUSE_SEC = 0.35  # Pausa entre tickers para evitar rate limits
 
 
