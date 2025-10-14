@@ -1,75 +1,42 @@
-# -*- coding: utf-8 -*-
-"""
-data.py — Descarga y normalización de cotizaciones desde Yahoo Finance
-Compatible con ibex_murphy_bot_github_v5
-"""
-
+# data.py
 import yfinance as yf
 import pandas as pd
 
+def download_bars(ticker, period="6mo", interval="1d"):
+    print(f"[Info] Descargando datos para {ticker}...")
 
-DEFAULT_PERIOD = "6mo"
-DEFAULT_INTERVAL = "1d"
+    df = yf.download(ticker, period=period, interval=interval, progress=False)
 
-
-def download_bars(ticker: str, period: str = DEFAULT_PERIOD, interval: str = DEFAULT_INTERVAL):
-    """
-    Descarga los datos históricos de un ticker usando Yahoo Finance.
-    Devuelve un DataFrame con columnas: timestamp, open, high, low, close, volume.
-    """
-    try:
-        df = yf.download(ticker, period=period, interval=interval, progress=False)
-
-        if df is None or df.empty:
-            print(f"[Advertencia] {ticker}: sin datos recientes.")
-            return None
-
-        # 🔹 Aplana las columnas si hay MultiIndex
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = [f"{a}_{b}".strip().lower() for a, b in df.columns]
-        else:
-            df.columns = [c.lower() for c in df.columns]
-
-        # 🔹 Localiza columnas posibles
-        candidates = {
-            "open": [c for c in df.columns if "open" in c],
-            "high": [c for c in df.columns if "high" in c],
-            "low": [c for c in df.columns if "low" in c],
-            "close": [c for c in df.columns if "close" in c or "adjclose" in c],
-            "volume": [c for c in df.columns if "volume" in c],
-        }
-
-        # 🔹 Renombra y selecciona las columnas clave
-        df_final = pd.DataFrame()
-        df_final["timestamp"] = df.index
-        for key, names in candidates.items():
-            if names:
-                df_final[key] = df[names[0]].astype(float)
-            else:
-                df_final[key] = None
-
-        # 🔹 Elimina filas con datos faltantes
-        df_final = df_final.dropna(subset=["close"])
-
-        return df_final
-
-    except Exception as e:
-        print(f"[Error en download_bars] {ticker}: {e}")
+    if df.empty:
+        print(f"[Advertencia] {ticker}: sin datos recientes.")
         return None
 
+    # --- 🔧 Aplanar columnas si vienen con MultiIndex ---
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [f"{a}_{b}".strip().lower() for a, b in df.columns]
+    else:
+        df.columns = [c.lower() for c in df.columns]
 
-# 🔹 Bloque de prueba manual
-if __name__ == "__main__":
-    tickers = ["CABK.MC", "SAN.MC", "TEF.MC", "REP.MC"]
-    for t in tickers:
-        print(f"\n[Info] Descargando {t} ...")
-        df = download_bars(t)
-        if df is not None and not df.empty:
-            print(f"{t}: {len(df)} registros descargados correctamente.")
-            print(df.tail(3))
-        else:
-            print(f"[Advertencia] {t}: sin datos o DataFrame vacío.")
-        print("-" * 60)
+    # --- 🔧 Renombrar columnas a un formato uniforme ---
+    rename_map = {}
+    for c in df.columns:
+        if "open" in c: rename_map[c] = "open"
+        elif "high" in c: rename_map[c] = "high"
+        elif "low" in c: rename_map[c] = "low"
+        elif "close" in c: rename_map[c] = "close"
+        elif "volume" in c: rename_map[c] = "volume"
+    df = df.rename(columns=rename_map)
+
+    # --- 🔧 Añadir columna de timestamp ---
+    df["timestamp"] = df.index
+    df = df.reset_index(drop=True)
+
+    # --- 🔧 Seleccionar solo las columnas útiles ---
+    cols = ["timestamp", "open", "high", "low", "close", "volume"]
+    df = df[[c for c in cols if c in df.columns]]
+
+    return df
+
 
 
 
