@@ -43,6 +43,6 @@ MIN_HOLD_HOURS = int(os.getenv('MIN_HOLD_HOURS', '2'))
 # ===== Zona horaria y control horario =====
 TIMEZONE = os.getenv('TIMEZONE') or 'Europe/Madrid'
 MARKET_OPEN = os.getenv('MARKET_OPEN', '09:00')
-MARKET_CLOSE = os.getenv('MARKET_CLOSE', '17:35')
+MARKET_CLOSE = os.getenv('MARKET_CLOSE', '20:35')
 
 DRY_RUN = os.getenv('DRY_RUN', 'True').lower() == 'true'
