@@ -2,7 +2,7 @@
 import yfinance as yf
 import pandas as pd
 
-def download_bars(ticker, period="6mo", interval="1d"):
+def download_bars(ticker, period="12mo", interval="1d"):
     print(f"[Info] Descargando datos para {ticker}...")
 
     df = yf.download(ticker, period=period, interval=interval, progress=False)
