@@ -1,54 +1,39 @@
 # -*- coding: utf-8 -*-
 """
-Módulo: data.py
-Descarga de datos bursátiles desde Yahoo Finance con control de errores.
-Compatible con MultiIndex y estructura estándar del bot Murphy.
+📈 Funciones de descarga de datos para el bot
 """
 
 import yfinance as yf
 import pandas as pd
 
-FAILED_TICKERS = set()  # Lista negra temporal para símbolos que fallan
-
-
-def download_bars(ticker: str, period: str = "12mo", interval: str = "1d") -> pd.DataFrame:
-    """Descarga los datos de Yahoo Finance con manejo seguro de errores."""
-    if ticker in FAILED_TICKERS:
-        print(f"[Info] {ticker}: previamente falló, omitido.")
-        return pd.DataFrame()
-
+def download_bars(ticker: str, period='3mo', interval='1d') -> pd.DataFrame:
+    """
+    Descarga barras históricas para un ticker.
+    Retorna DataFrame con columnas: ['open','high','low','close','volume']
+    Siempre aplanando MultiIndex si existe.
+    """
     try:
-        df = yf.download(
-            ticker,
-            period=period,
-            interval=interval,
-            progress=False,
-            auto_adjust=False  # explícito para evitar warnings
-        )
+        df = yf.download(ticker, period=period, interval=interval, progress=False)
 
-        if df is None or df.empty:
-            print(f"[Advertencia] {ticker}: sin datos o símbolo no válido.")
-            FAILED_TICKERS.add(ticker)
-            return pd.DataFrame()
+        if df.empty:
+            return None
 
-        # Reiniciar índice y normalizar nombres de columnas
-        df = df.reset_index()
-        df.rename(columns=lambda x: x.lower(), inplace=True)
-        df.rename(columns={"date": "timestamp"}, inplace=True)
+        # Normalizar nombres de columna
+        df = df.rename(columns=str.lower)  # lowercase
+        expected_cols = ['open', 'high', 'low', 'close', 'volume']
+        if not all(col in df.columns for col in expected_cols):
+            # Caso MultiIndex
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [col[0].lower() for col in df.columns]
+            df = df[expected_cols]
 
-        # Eliminar duplicados y filas sin cierre válido
-        if 'close' in df.columns:
-            df.dropna(subset=['close'], inplace=True)
-        else:
-            print(f"[Error] {ticker}: columna 'close' no encontrada en columnas {list(df.columns)}")
-            return pd.DataFrame()
-
+        df = df.dropna()
         return df
 
     except Exception as e:
         print(f"[Error en download_bars] {ticker}: {e}")
-        FAILED_TICKERS.add(ticker)
-        return pd.DataFrame()
+        return None
+
 
 
 
