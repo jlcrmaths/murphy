@@ -101,18 +101,26 @@ def scan_once():
                 df.columns = [f"{c[0].lower()}" for c in df.columns]
             df.columns = [c.lower() for c in df.columns]
 
-            if 'close' not in df.columns:
-                print(f"[Error] {ticker}: columna 'close' no encontrada en {list(df.columns)}")
-                time.sleep(PAUSE_SEC)
-                continue
-
+            # === Obtener el último precio de cierre (robusto) ===
             try:
-                last_close = float(df['close'].iloc[-1])
+                if isinstance(df.columns, pd.MultiIndex):
+                    close_cols = [col for col in df.columns if str(col[0]).lower() == 'close']
+                    if not close_cols:
+                        raise KeyError("No se encontró columna 'close' en MultiIndex")
+                    last_close = float(df[close_cols[0]].iloc[-1])
+                else:
+                    possible_names = ['close', 'Close', 'CLOSE']
+                    col_name = next((c for c in df.columns if c in possible_names), None)
+                    if not col_name:
+                        raise KeyError(f"Columnas disponibles: {list(df.columns)}")
+                    last_close = float(df[col_name].iloc[-1])
+
             except Exception as e:
                 print(f"[Error] {ticker}: no se pudo obtener precio de cierre ({e})")
                 time.sleep(PAUSE_SEC)
                 continue
 
+            # Filtro de precio
             if last_close >= TEN_EUROS:
                 print(f"[Info] {ticker}: precio superior a {TEN_EUROS} €, omitido.")
                 time.sleep(PAUSE_SEC)
@@ -168,6 +176,7 @@ if __name__ == '__main__':
     print("=" * 60)
     print(" 🔚 Escaneo finalizado ")
     print("=" * 60)
+
 
 
 
