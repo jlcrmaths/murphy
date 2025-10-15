@@ -89,7 +89,6 @@ def scan_once():
             print(f"\n[Info] Escaneando {ticker} ...")
             print(f"[Info] Descargando datos para {ticker}...")
 
-            # === Descarga de datos ===
             df = download_bars(ticker)
             if df is None or df.empty:
                 print(f"[Advertencia] {ticker}: sin datos recientes.")
@@ -101,24 +100,16 @@ def scan_once():
                 df.columns = [f"{c[0].lower()}" for c in df.columns]
             df.columns = [c.lower() for c in df.columns]
 
-            # === Obtener el último precio de cierre (robusto) ===
-            try:
-                if isinstance(df.columns, pd.MultiIndex):
-                    close_cols = [col for col in df.columns if str(col[0]).lower() == 'close']
-                    if not close_cols:
-                        raise KeyError("No se encontró columna 'close' en MultiIndex")
-                    last_close = float(df[close_cols[0]].iloc[-1])
-                else:
-                    possible_names = ['close', 'Close', 'CLOSE']
-                    col_name = next((c for c in df.columns if c in possible_names), None)
-                    if not col_name:
-                        raise KeyError(f"Columnas disponibles: {list(df.columns)}")
-                    last_close = float(df[col_name].iloc[-1])
+            # --- Obtener último precio de cierre robusto ---
+            possible_names = ['close', 'adj close', 'adjclose']
+            col_name = next((c for c in df.columns if c in possible_names), None)
 
-            except Exception as e:
-                print(f"[Error] {ticker}: no se pudo obtener precio de cierre ({e})")
+            if col_name is None:
+                print(f"[Error] {ticker}: columnas disponibles: {list(df.columns)}")
                 time.sleep(PAUSE_SEC)
                 continue
+
+            last_close = float(df[col_name].iloc[-1])
 
             # Filtro de precio
             if last_close >= TEN_EUROS:
@@ -147,7 +138,7 @@ def scan_once():
                 finally:
                     time.sleep(PAUSE_SEC)
 
-            # === Combinar señales ===
+            # === Combinar señales y enviar alertas solo verdes/amarillas ===
             final_signal = combine_signals(ticker_signals)
             if final_signal and final_signal['color'] in ['green', 'yellow']:
                 ts = pd.to_datetime(final_signal['timestamp'])
@@ -176,6 +167,7 @@ if __name__ == '__main__':
     print("=" * 60)
     print(" 🔚 Escaneo finalizado ")
     print("=" * 60)
+
 
 
 
