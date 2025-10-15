@@ -47,6 +47,28 @@ def load_universe() -> list:
         pass
     return UNIVERSE_DEFAULT
 
+def combine_signals(signals: list) -> dict:
+    """
+    Combina señales de varias estrategias por mayoría:
+    - Verde si al menos 2 estrategias dan green
+    - Amarillo si solo 1 estrategia da green o amarillo
+    - Rojo si ninguna da verde/amarillo
+    """
+    count_green = sum(1 for s in signals if s.get('color') == 'green')
+    count_yellow = sum(1 for s in signals if s.get('color') == 'yellow')
+
+    final_color = 'red'
+    if count_green >= 2:
+        final_color = 'green'
+    elif count_green == 1 or count_yellow >= 1:
+        final_color = 'yellow'
+
+    if signals:
+        latest_signal = max(signals, key=lambda x: x.get('timestamp', '1970-01-01'))
+        latest_signal['color'] = final_color
+        return latest_signal
+    return None
+
 # === Núcleo principal ===
 
 def scan_once():
@@ -76,29 +98,16 @@ def scan_once():
                 continue
 
             # === Ejecutar todas las estrategias ===
+            ticker_signals = []
             for strategy_module_name in STRATEGIES:
                 module = importlib.import_module(strategy_module_name)
                 strategy_name = strategy_module_name.split('.')[-1]
 
                 try:
                     signal = module.generate_signal(df)
-
                     if signal:
-                        # Procesamiento temporal
-                        ts = pd.to_datetime(signal['timestamp'])
-                        if ts.tzinfo is None:
-                            ts = ts.tz_localize('UTC')
-                        ts_local = ts.tz_convert(tz)
-
-                        min_exit = (ts_local + timedelta(hours=MIN_HOLD_HOURS)).strftime('%Y-%m-%d %H:%M:%S %Z')
-                        max_exit = (ts_local + timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S %Z')
-                        signal['min_exit'] = min_exit
-                        signal['max_exit'] = max_exit
-
-                        # Generación del mensaje y envío
-                        msg = format_alert(ticker, signal, strategy_name=strategy_name)
-                        send_telegram_message(msg)
-
+                        signal['strategy_name'] = strategy_name
+                        ticker_signals.append(signal)
                         # Simulación de rendimiento teórico
                         pnl = (signal.get('tp', 0) - signal.get('entry', 0)) / max(signal.get('entry', 1), 1e-6)
                         log_result(strategy_name, success=True, pnl=pnl)
@@ -107,9 +116,21 @@ def scan_once():
 
                 except Exception as e:
                     print(f"[Error] {ticker} - {strategy_name}: {e}")
-
                 finally:
                     time.sleep(PAUSE_SEC)
+
+            # === Combinar señales y enviar Telegram solo si green o yellow ===
+            final_signal = combine_signals(ticker_signals)
+            if final_signal and final_signal['color'] in ['green', 'yellow']:
+                ts = pd.to_datetime(final_signal['timestamp'])
+                if ts.tzinfo is None:
+                    ts = ts.tz_localize('UTC')
+                ts_local = ts.tz_convert(tz)
+                final_signal['min_exit'] = (ts_local + timedelta(hours=MIN_HOLD_HOURS)).strftime('%Y-%m-%d %H:%M:%S %Z')
+                final_signal['max_exit'] = (ts_local + timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S %Z')
+
+                msg = format_alert(ticker, final_signal, strategy_name='combined')
+                send_telegram_message(msg)
 
         except Exception as e:
             print(f"[Error] {ticker}: {e}")
