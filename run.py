@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Script principal del bot IBEX Murphy adaptativo.
-Descarga datos, rota entre estrategias y registra rendimiento.
-"""
 from datetime import datetime, timedelta
 import time
 import pytz
@@ -12,12 +8,13 @@ from config import (
     UNIVERSE_FILE, DEFAULT_UNIVERSE as UNIVERSE_DEFAULT
 )
 from data import download_bars
-from strategy_manager import get_next_strategy
-from strategy_performance import log_result
+from strategy_manager import get_next_strategy   # ✅ CORRECTO
+from strategy_performance import log_result      # ✅ NUEVO
 from notifier import send_telegram_message, format_alert
 
+
 # Parámetros generales
-TEN_EUROS = 10.0
+TEN_EUROS = 100.0
 PAUSE_SEC = 0.35  # Pausa entre tickers para evitar rate limits
 
 
