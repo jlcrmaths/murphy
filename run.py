@@ -26,6 +26,7 @@ PAUSE_SEC = 0.35  # Pausa entre tickers para evitar rate limits
 # Crear carpeta logs si no existe
 os.makedirs("logs", exist_ok=True)
 
+
 # === Funciones auxiliares ===
 
 def within_market_hours(dt_local: datetime) -> bool:
@@ -35,6 +36,7 @@ def within_market_hours(dt_local: datetime) -> bool:
     h_open = datetime.strptime(MARKET_OPEN, '%H:%M').time()
     h_close = datetime.strptime(MARKET_CLOSE, '%H:%M').time()
     return h_open <= dt_local.time() <= h_close
+
 
 def load_universe() -> list:
     """Carga el universo de tickers desde archivo o usa el de config."""
@@ -46,6 +48,7 @@ def load_universe() -> list:
     except FileNotFoundError:
         pass
     return UNIVERSE_DEFAULT
+
 
 def combine_signals(signals: list) -> dict:
     """
@@ -69,6 +72,7 @@ def combine_signals(signals: list) -> dict:
         return latest_signal
     return None
 
+
 # === Núcleo principal ===
 
 def scan_once():
@@ -83,15 +87,32 @@ def scan_once():
     for ticker in load_universe():
         try:
             print(f"\n[Info] Escaneando {ticker} ...")
+            print(f"[Info] Descargando datos para {ticker}...")
 
-            # Descarga de datos
+            # === Descarga de datos ===
             df = download_bars(ticker)
             if df is None or df.empty:
                 print(f"[Advertencia] {ticker}: sin datos recientes.")
                 time.sleep(PAUSE_SEC)
                 continue
 
-            last_close = float(df['close'].iloc[-1])
+            # --- Normalizar columnas ---
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [f"{c[0].lower()}" for c in df.columns]
+            df.columns = [c.lower() for c in df.columns]
+
+            if 'close' not in df.columns:
+                print(f"[Error] {ticker}: columna 'close' no encontrada en {list(df.columns)}")
+                time.sleep(PAUSE_SEC)
+                continue
+
+            try:
+                last_close = float(df['close'].iloc[-1])
+            except Exception as e:
+                print(f"[Error] {ticker}: no se pudo obtener precio de cierre ({e})")
+                time.sleep(PAUSE_SEC)
+                continue
+
             if last_close >= TEN_EUROS:
                 print(f"[Info] {ticker}: precio superior a {TEN_EUROS} €, omitido.")
                 time.sleep(PAUSE_SEC)
@@ -108,7 +129,6 @@ def scan_once():
                     if signal:
                         signal['strategy_name'] = strategy_name
                         ticker_signals.append(signal)
-                        # Simulación de rendimiento teórico
                         pnl = (signal.get('tp', 0) - signal.get('entry', 0)) / max(signal.get('entry', 1), 1e-6)
                         log_result(strategy_name, success=True, pnl=pnl)
                     else:
@@ -119,7 +139,7 @@ def scan_once():
                 finally:
                     time.sleep(PAUSE_SEC)
 
-            # === Combinar señales y enviar Telegram solo si green o yellow ===
+            # === Combinar señales ===
             final_signal = combine_signals(ticker_signals)
             if final_signal and final_signal['color'] in ['green', 'yellow']:
                 ts = pd.to_datetime(final_signal['timestamp'])
@@ -131,11 +151,13 @@ def scan_once():
 
                 msg = format_alert(ticker, final_signal, strategy_name='combined')
                 send_telegram_message(msg)
+                print(f"[ALERTA] {ticker} → {final_signal['color'].upper()} enviada a Telegram ✅")
 
         except Exception as e:
             print(f"[Error] {ticker}: {e}")
         finally:
             time.sleep(PAUSE_SEC)
+
 
 # === Ejecución directa ===
 if __name__ == '__main__':
@@ -146,6 +168,7 @@ if __name__ == '__main__':
     print("=" * 60)
     print(" 🔚 Escaneo finalizado ")
     print("=" * 60)
+
 
 
 
