@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-🤖 IBEX Murphy Adaptive Bot — Ejecución completa con todas las estrategias
+🤖 IBEX Murphy Adaptive Bot — Escaneo robusto con manejo de errores
 """
 
 from datetime import datetime, timedelta
@@ -9,19 +9,23 @@ import pytz
 import pandas as pd
 import importlib
 import os
+import yfinance as yf
 
 from config import (
     TIMEZONE, MIN_HOLD_HOURS, MARKET_OPEN, MARKET_CLOSE,
     UNIVERSE_FILE, DEFAULT_UNIVERSE as UNIVERSE_DEFAULT
 )
-from data import download_bars
 from strategy_manager import STRATEGIES
 from strategy_performance import log_result
 from notifier import send_telegram_message, format_alert
 
+# Parámetros generales
 TEN_EUROS = 100.0
-PAUSE_SEC = 0.35
+PAUSE_SEC = 0.35  # Pausa entre tickers para evitar rate limits
+
 os.makedirs("logs", exist_ok=True)
+
+# === Funciones auxiliares ===
 
 def within_market_hours(dt_local: datetime) -> bool:
     if dt_local.weekday() > 4:
@@ -40,6 +44,26 @@ def load_universe() -> list:
         pass
     return UNIVERSE_DEFAULT
 
+def download_bars(ticker: str, retries=3):
+    for attempt in range(retries):
+        try:
+            df = yf.download(ticker, period='3mo', interval='1d', progress=False)
+            if not df.empty:
+                return df
+        except Exception as e:
+            print(f"[Intento {attempt+1}] Error {ticker}: {e}")
+            time.sleep(1)
+    print(f"[Error en download_bars] {ticker}: sin datos.")
+    return None
+
+def normalize_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Aplana MultiIndex y normaliza nombres de columnas."""
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [f"{c[0].lower()}_{c[1].lower()}" for c in df.columns]
+    else:
+        df.columns = [c.lower() for c in df.columns]
+    return df
+
 def combine_signals(signals: list) -> dict:
     count_green = sum(1 for s in signals if s.get('color') == 'green')
     count_yellow = sum(1 for s in signals if s.get('color') == 'yellow')
@@ -54,6 +78,8 @@ def combine_signals(signals: list) -> dict:
         return latest_signal
     return None
 
+# === Núcleo principal ===
+
 def scan_once():
     tz = pytz.timezone(TIMEZONE)
     now_local = datetime.now(tz)
@@ -67,20 +93,25 @@ def scan_once():
             df = download_bars(ticker)
             if df is None or df.empty:
                 print(f"[Advertencia] {ticker}: sin datos recientes.")
-                time.sleep(PAUSE_SEC)
                 continue
 
-            last_close = df['close'].iloc[-1]
+            df = normalize_df(df)
+
+            # Último cierre
+            close_cols = [c for c in df.columns if 'close' in c]
+            if not close_cols:
+                print(f"[Error] {ticker}: columna 'close' no encontrada.")
+                continue
+            last_close = float(df[close_cols[0]].iloc[-1])
+
             if last_close >= TEN_EUROS:
-                print(f"[Info] {ticker}: precio superior a {TEN_EUROS} €, omitido.")
-                time.sleep(PAUSE_SEC)
+                print(f"[Info] {ticker}: precio > {TEN_EUROS} €, omitido.")
                 continue
 
             ticker_signals = []
             for strategy_module_name in STRATEGIES:
                 module = importlib.import_module(strategy_module_name)
                 strategy_name = strategy_module_name.split('.')[-1]
-
                 try:
                     signal = module.generate_signal(df)
                     if signal:
@@ -92,9 +123,9 @@ def scan_once():
                         log_result(strategy_name, success=False, pnl=0)
                 except Exception as e:
                     print(f"[Error] {ticker} - {strategy_name}: {e}")
-                finally:
-                    time.sleep(PAUSE_SEC)
+                time.sleep(PAUSE_SEC)
 
+            # Combinar señales
             final_signal = combine_signals(ticker_signals)
             if final_signal and final_signal['color'] in ['green', 'yellow']:
                 ts = pd.to_datetime(final_signal['timestamp'])
@@ -103,16 +134,15 @@ def scan_once():
                 ts_local = ts.tz_convert(tz)
                 final_signal['min_exit'] = (ts_local + timedelta(hours=MIN_HOLD_HOURS)).strftime('%Y-%m-%d %H:%M:%S %Z')
                 final_signal['max_exit'] = (ts_local + timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S %Z')
-
                 msg = format_alert(ticker, final_signal, strategy_name='combined')
                 send_telegram_message(msg)
                 print(f"[ALERTA] {ticker} → {final_signal['color'].upper()} enviada a Telegram ✅")
 
         except Exception as e:
             print(f"[Error] {ticker}: {e}")
-        finally:
-            time.sleep(PAUSE_SEC)
+        time.sleep(PAUSE_SEC)
 
+# === Ejecución directa ===
 if __name__ == '__main__':
     print("=" * 60)
     print(" 🤖 IBEX Murphy Adaptive Bot — Inicio de escaneo ")
@@ -121,6 +151,7 @@ if __name__ == '__main__':
     print("=" * 60)
     print(" 🔚 Escaneo finalizado ")
     print("=" * 60)
+
 
 
 
