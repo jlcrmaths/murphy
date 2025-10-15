@@ -3,10 +3,20 @@
 import pandas as pd
 from data import download_bars
 import importlib
-from strategies_list import STRATEGIES  # tu lista de 8 estrategias
-from strategy_performance import get_strategy_scores
 import itertools
 import random
+
+# --- Lista de 8 estrategias ---
+STRATEGIES = [
+    "strategies.murphy",
+    "strategies.macd_momentum",
+    "strategies.rsi_reversal",
+    "strategies.bollinger_rebound",
+    "strategies.ema_crossover",
+    "strategies.candle_ma_rsi",
+    "strategies.candle_sr_volume",
+    "strategies.candle_boll_rsi"
+]
 
 _cycle = itertools.cycle(STRATEGIES)
 
@@ -22,7 +32,12 @@ failed_tickers = []
 
 def get_next_strategy():
     """Devuelve una estrategia ponderada por rendimiento."""
-    scores = get_strategy_scores()
+    try:
+        from strategy_performance import get_strategy_scores
+        scores = get_strategy_scores()
+    except ImportError:
+        scores = {}
+
     if not scores:
         module_name = next(_cycle)
         module = importlib.import_module(module_name)
@@ -76,6 +91,7 @@ if failed_tickers:
     print("\n[Resumen] Tickers fallidos u omitidos:")
     for t in failed_tickers:
         print(f" - {t}")
+
 
 
 
