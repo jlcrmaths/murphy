@@ -26,7 +26,6 @@ PAUSE_SEC = 0.35  # Pausa entre tickers para evitar rate limits
 # Crear carpeta logs si no existe
 os.makedirs("logs", exist_ok=True)
 
-
 # === Funciones auxiliares ===
 
 def within_market_hours(dt_local: datetime) -> bool:
@@ -89,6 +88,7 @@ def scan_once():
             print(f"\n[Info] Escaneando {ticker} ...")
             print(f"[Info] Descargando datos para {ticker}...")
 
+            # === Descarga de datos ===
             df = download_bars(ticker)
             if df is None or df.empty:
                 print(f"[Advertencia] {ticker}: sin datos recientes.")
@@ -97,18 +97,17 @@ def scan_once():
 
             # --- Normalizar columnas ---
             if isinstance(df.columns, pd.MultiIndex):
-                df.columns = [f"{c[0].lower()}" for c in df.columns]
-            df.columns = [c.lower() for c in df.columns]
+                df.columns = [f"{c[0].lower()}_{c[1].lower()}" for c in df.columns]
+            else:
+                df.columns = [c.lower() for c in df.columns]
 
-            # --- Obtener último precio de cierre robusto ---
+            # === Obtener el último precio de cierre robusto ===
             possible_names = ['close', 'adj close', 'adjclose']
-            col_name = next((c for c in df.columns if c in possible_names), None)
-
+            col_name = next((c for c in df.columns if any(p in c.lower() for p in possible_names)), None)
             if col_name is None:
                 print(f"[Error] {ticker}: columnas disponibles: {list(df.columns)}")
                 time.sleep(PAUSE_SEC)
                 continue
-
             last_close = float(df[col_name].iloc[-1])
 
             # Filtro de precio
@@ -138,7 +137,7 @@ def scan_once():
                 finally:
                     time.sleep(PAUSE_SEC)
 
-            # === Combinar señales y enviar alertas solo verdes/amarillas ===
+            # === Combinar señales ===
             final_signal = combine_signals(ticker_signals)
             if final_signal and final_signal['color'] in ['green', 'yellow']:
                 ts = pd.to_datetime(final_signal['timestamp'])
@@ -167,6 +166,7 @@ if __name__ == '__main__':
     print("=" * 60)
     print(" 🔚 Escaneo finalizado ")
     print("=" * 60)
+
 
 
 
