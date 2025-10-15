@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
+import os
 import requests
 from typing import Dict
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_THREAD_ID
 
 API_URL = "https://api.telegram.org/bot{token}/{method}"
+
+# Leer de variables de entorno (provenientes del workflow)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_THREAD_ID = os.getenv("TELEGRAM_THREAD_ID", None)
+
 
 def send_telegram_message(text: str) -> None:
     if TELEGRAM_BOT_TOKEN.startswith('PON_AQUI') or TELEGRAM_CHAT_ID.startswith('PON_AQUI'):
