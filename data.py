@@ -5,7 +5,14 @@ import pandas as pd
 def download_bars(ticker, period="12mo", interval="1d"):
     print(f"[Info] Descargando datos para {ticker}...")
 
-    df = yf.download(ticker, period=period, interval=interval, progress=False)
+    df = yf.download(
+    ticker,
+    period=period,
+    interval=interval,
+    progress=False,
+    auto_adjust=False  # 👈 explícito, evita el FutureWarning
+)
+
 
     if df.empty:
         print(f"[Advertencia] {ticker}: sin datos recientes.")
