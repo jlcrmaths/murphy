@@ -13,8 +13,12 @@ STRATEGIES = [
     "strategies.macd_momentum",
     "strategies.rsi_reversal",
     "strategies.bollinger_rebound",
-    "strategies.ema_crossover"
+    "strategies.ema_crossover",
+    "strategies.candle_ma_rsi",
+    "strategies.candle_sr_volume",
+    "strategies.candle_boll_rsi"
 ]
+
 
 _cycle = itertools.cycle(STRATEGIES)
 
