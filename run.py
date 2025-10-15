@@ -1,4 +1,4 @@
-he cambiado el run.py # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 🤖 IBEX Murphy Adaptive Bot — Ejecución completa con todas las estrategias
 """
