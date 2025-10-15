@@ -20,13 +20,14 @@ STRATEGIES = [
 
 _cycle = itertools.cycle(STRATEGIES)
 
-# Lista de tickers a escanear
-TICKERS = [
-    "AAPL", "MSFT", "GOOG", "CABK.MC", "SAB.MC", "CLEOP.MC",
-    "OLE.MC", "MDF.MC", "ECOENER.MC", "EDR.MC", "AENA.MC"
-]
+# --- Leer tickers desde archivo ---
+TICKERS = []
+with open("tickers_ibex.txt", "r", encoding="utf-8") as f:
+    for line in f:
+        ticker = line.strip()
+        if ticker:
+            TICKERS.append(ticker)
 
-# Guardar resultados
 signals_summary = []
 failed_tickers = []
 
@@ -48,7 +49,6 @@ def get_next_strategy():
     module = importlib.import_module(module_name)
     print(f"[Adaptive] Estrategia '{module_name.split('.')[-1]}' seleccionada con peso {scores.get(module_name.split('.')[-1], 0.5):.2f}")
     return module.generate_signal, module_name.split(".")[-1]
-
 
 # --- Escaneo principal ---
 for ticker in TICKERS:
@@ -91,6 +91,7 @@ if failed_tickers:
     print("\n[Resumen] Tickers fallidos u omitidos:")
     for t in failed_tickers:
         print(f" - {t}")
+
 
 
 
