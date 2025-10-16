@@ -1,12 +1,18 @@
-# run.py
 # -*- coding: utf-8 -*-
+"""
+🤖 IBEX Murphy Adaptive Bot — versión con interpretación de señales y recomendaciones
+"""
+
 import pandas as pd
-from data import download_bars
 import importlib
 import itertools
 import random
+import time
+from data import download_bars
+from notifier import send_telegram_message
+from advisor import analyze_and_update
 
-# --- Lista de 8 estrategias ---
+# --- Estrategias disponibles ---
 STRATEGIES = [
     "strategies.murphy",
     "strategies.macd_momentum",
@@ -25,83 +31,87 @@ TICKERS = []
 with open("tickers_ibex.txt", "r", encoding="utf-8") as f:
     for line in f:
         ticker = line.strip()
-        if ticker:
+        if ticker and not ticker.startswith("#"):
             TICKERS.append(ticker)
 
 signals_summary = []
 failed_tickers = []
 
-def get_next_strategy():
-    """Devuelve una estrategia ponderada por rendimiento."""
-    try:
-        from strategy_performance import get_strategy_scores
-        scores = get_strategy_scores()
-    except ImportError:
-        scores = {}
-
-    if not scores:
-        module_name = next(_cycle)
-        module = importlib.import_module(module_name)
-        return module.generate_signal, module_name.split(".")[-1]
-
-    weights = [scores.get(s.split(".")[-1], 0.5) for s in STRATEGIES]
-    module_name = random.choices(STRATEGIES, weights=weights, k=1)[0]
-    module = importlib.import_module(module_name)
-    print(f"[Adaptive] Estrategia '{module_name.split('.')[-1]}' seleccionada con peso {scores.get(module_name.split('.')[-1], 0.5):.2f}")
-    return module.generate_signal, module_name.split(".")[-1]
-
 # --- Escaneo principal ---
 for ticker in TICKERS:
-    print(f"[Info] Escaneando {ticker} ...")
+    print(f"\n[Info] Escaneando {ticker} ...")
     df = download_bars(ticker)
     
-    if df is None or df.empty:
-        print(f"[Advertencia] {ticker}: sin datos recientes, omitido.")
+    if df is None or df.empty or "close" not in df.columns:
+        print(f"[Advertencia] {ticker}: sin datos válidos, omitido.")
         failed_tickers.append(ticker)
         continue
 
-    ticker_signals = {"ticker": ticker, "signals": []}
+    last_close = float(df["close"].iloc[-1])
+    strategy_signals = {}
 
     for strategy_path in STRATEGIES:
         module = importlib.import_module(strategy_path)
+        strategy_name = strategy_path.split(".")[-1]
         try:
             signal = module.generate_signal(df)
-            ticker_signals["signals"].append({
-                "strategy": strategy_path.split(".")[-1],
-                "signal": signal
-            })
-            print(f"[DEBUG] {ticker} - {strategy_path.split('.')[-1]} -> {signal}")
+            if signal:
+                # Si detecta señal de compra o venta
+                if signal.get("type") == "buy":
+                    strategy_signals[strategy_name] = "buy"
+                elif signal.get("type") == "sell":
+                    strategy_signals[strategy_name] = "sell"
+                else:
+                    strategy_signals[strategy_name] = None
+            else:
+                strategy_signals[strategy_name] = None
+
+            print(f"[DEBUG] {ticker} - {strategy_name}: {strategy_signals[strategy_name]}")
+
         except Exception as e:
-            print(f"[Error] {ticker} - {strategy_path.split('.')[-1]}: {e}")
-            ticker_signals["signals"].append({
-                "strategy": strategy_path.split(".")[-1],
-                "signal": None
-            })
+            print(f"[Error] {ticker} - {strategy_name}: {e}")
+            strategy_signals[strategy_name] = None
+        finally:
+            time.sleep(0.2)
 
-    signals_summary.append(ticker_signals)
+    # --- Obtener recomendación global del asesor ---
+    recommendation = analyze_and_update(ticker, strategy_signals, last_close)
+    print(f"[Recomendación] {ticker} → {recommendation.upper()}")
 
-# --- Resumen final ---
-print("\n[Resumen] Señales obtenidas:")
+    # --- Guardar resultado para resumen ---
+    signals_summary.append({
+        "ticker": ticker,
+        "price": last_close,
+        "signals": strategy_signals,
+        "recommendation": recommendation
+    })
+
+# --- Crear CSV resumen ---
+results = []
 for t in signals_summary:
-    print(f"{t['ticker']}:")
-    for s in t["signals"]:
-        print(f"  {s['strategy']}: {s['signal']}")
+    for strat, sig in t["signals"].items():
+        results.append({
+            "ticker": t["ticker"],
+            "price": t["price"],
+            "strategy": strat,
+            "signal": sig,
+            "recommendation": t["recommendation"]
+        })
 
-if failed_tickers:
-    print("\n[Resumen] Tickers fallidos u omitidos:")
-    for t in failed_tickers:
-        print(f" - {t}")
+df_summary = pd.DataFrame(results)
+df_summary.to_csv("signals_summary.csv", index=False)
+print("\n[Guardado] Archivo signals_summary.csv generado ✅")
 
+# --- Enviar alertas por Telegram solo si hay cambios relevantes ---
+alerts = []
+for r in results:
+    if r["recommendation"] in ("buy", "close", "sell"):
+        alerts.append(f"*{r['ticker']}* → {r['recommendation'].upper()} ({r['strategy']})")
 
-
-
-
-
-
-
-
-
-
-
+if alerts:
+    msg = "📊 *IBEX Murphy Advisor — Nuevas Recomendaciones*\n\n" + "\n".join(alerts)
+    send_telegram_message(msg)
+else:
+    print("\n[Info] Sin cambios relevantes — no se envían alertas.")
 
 
