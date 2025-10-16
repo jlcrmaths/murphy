@@ -103,15 +103,31 @@ df_summary.to_csv("signals_summary.csv", index=False)
 print("\n[Guardado] Archivo signals_summary.csv generado ✅")
 
 # --- Enviar alertas por Telegram solo si hay cambios relevantes ---
+
+# --- Enviar alertas por Telegram solo si hay cambios relevantes ---
+emoji_map = {
+    "buy": ("🟢 Comprar", "Tendencia alcista confirmada."),
+    "sell": ("🔴 Vender", "Señales bajistas predominantes."),
+    "close": ("⛔ Cerrar posición", "Señal contraria detectada tras una compra."),
+    "hold": ("⚪ Mantener", "Sin cambios significativos."),
+    "watch": ("🟡 En seguimiento", "Señales mixtas o falta de confirmación."),
+    "rebound": ("🔵 Rebotando", "Posible giro tras una fase bajista.")
+}
+
 alerts = []
 for r in results:
-    if r["recommendation"] in ("buy", "close", "sell"):
-        alerts.append(f"*{r['ticker']}* → {r['recommendation'].upper()} ({r['strategy']})")
+    rec = r["recommendation"]
+    if rec in emoji_map:
+        emoji, desc = emoji_map[rec]
+        alerts.append(f"*{r['ticker']}* → {emoji} — {desc} ({r['strategy']})")
 
 if alerts:
-    msg = "📊 *IBEX Murphy Advisor — Nuevas Recomendaciones*\n\n" + "\n".join(alerts)
+    msg = (
+        "📊 *IBEX Murphy Advisor — Recomendaciones actualizadas*\n\n"
+        + "\n".join(alerts)
+        + "\n\n💡 _Estas recomendaciones se basan en consenso técnico entre estrategias._"
+    )
     send_telegram_message(msg)
 else:
     print("\n[Info] Sin cambios relevantes — no se envían alertas.")
-
 
