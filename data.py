@@ -1,4 +1,7 @@
 # data.py
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="yfinance")
+
 import yfinance as yf
 import pandas as pd
 
