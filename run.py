@@ -102,32 +102,62 @@ df_summary = pd.DataFrame(results)
 df_summary.to_csv("signals_summary.csv", index=False)
 print("\n[Guardado] Archivo signals_summary.csv generado ✅")
 
-# --- Enviar alertas por Telegram solo si hay cambios relevantes ---
+import requests
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
-# --- Enviar alertas por Telegram solo si hay cambios relevantes ---
+# --- Función auxiliar para enviar archivos ---
+def send_file_to_telegram(filename: str, caption: str = "📈 Informe de señales IBEX Murphy"):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+    try:
+        with open(filename, "rb") as f:
+            files = {"document": f}
+            data = {"chat_id": TELEGRAM_CHAT_ID, "caption": caption}
+            r = requests.post(url, files=files, data=data, timeout=30)
+            if r.status_code != 200:
+                print(f"[Telegram] Error al enviar archivo: {r.text}")
+            else:
+                print(f"[Telegram] Archivo '{filename}' enviado correctamente ✅")
+    except Exception as e:
+        print(f"[Telegram] Excepción al enviar archivo: {e}")
+
+# --- Función auxiliar para enviar textos largos ---
+def send_long_telegram_message(full_text: str):
+    """Envía un texto largo en trozos de ≤4000 caracteres."""
+    MAX_LEN = 4000
+    parts = [full_text[i:i + MAX_LEN] for i in range(0, len(full_text), MAX_LEN)]
+    for i, part in enumerate(parts, start=1):
+        if len(parts) > 1:
+            part += f"\n\n📄 Parte {i}/{len(parts)}"
+        send_telegram_message(part)
+
+# --- Mapas de emojis y explicaciones ---
 emoji_map = {
     "buy": ("🟢 Comprar", "Tendencia alcista confirmada."),
     "sell": ("🔴 Vender", "Señales bajistas predominantes."),
-    "close": ("⛔ Cerrar posición", "Señal contraria detectada tras una compra."),
+    "close": ("⛔ Cerrar posición", "Cambio de tendencia tras una compra."),
     "hold": ("⚪ Mantener", "Sin cambios significativos."),
-    "watch": ("🟡 En seguimiento", "Señales mixtas o falta de confirmación."),
+    "watch": ("🟡 En seguimiento", "Señales mixtas, falta confirmación."),
     "rebound": ("🔵 Rebotando", "Posible giro tras una fase bajista.")
 }
 
+# --- Crear resumen solo con recomendaciones clave ---
 alerts = []
 for r in results:
     rec = r["recommendation"]
-    if rec in emoji_map:
-        emoji, desc = emoji_map[rec]
+    if rec in ("buy", "sell", "close", "rebound"):  # filtramos solo señales importantes
+        emoji, desc = emoji_map.get(rec, ("❔", ""))
         alerts.append(f"*{r['ticker']}* → {emoji} — {desc} ({r['strategy']})")
 
+# --- Enviar mensaje Telegram resumido ---
 if alerts:
     msg = (
-        "📊 *IBEX Murphy Advisor — Recomendaciones actualizadas*\n\n"
+        "📊 *IBEX Murphy Advisor — Recomendaciones destacadas*\n\n"
         + "\n".join(alerts)
-        + "\n\n💡 _Estas recomendaciones se basan en consenso técnico entre estrategias._"
+        + "\n\n💡 _Se adjunta archivo CSV con el informe completo de estrategias._"
     )
-    send_telegram_message(msg)
+    send_long_telegram_message(msg)
+    send_file_to_telegram("signals_summary.csv")  # adjunta el informe completo
 else:
     print("\n[Info] Sin cambios relevantes — no se envían alertas.")
+
 
