@@ -67,14 +67,14 @@ def format_alert(ticker: str, signal: Dict) -> str:
     risk = safe(signal.get('risk_per_share'))
 
     text = (
-        f"<b>Señal LONG</b> en <b>{ticker}</b><br>"
-        f"Hora: <code>{safe(signal.get('timestamp'))}</code><br>"
-        f"Entrada: <code>{entry}</code><br>"
-        f"TP (arriba): <code>{tp}</code><br>"
-        f"SL (abajo): <code>{sl}</code><br>"
-        f"Nº acciones (presupuesto): <code>{shares}</code><br>"
+        f"<b>Señal LONG</b> en <b>{ticker}</b>\n"
+        f"Hora: <code>{safe(signal.get('timestamp'))}</code>\n"
+        f"Entrada: <code>{entry}</code>\n"
+        f"TP (arriba): <code>{tp}</code>\n"
+        f"SL (abajo): <code>{sl}</code>\n"
+        f"Nº acciones (presupuesto): <code>{shares}</code>\n"
         f"Riesgo/acción: <code>{risk}</code>"
-        f"{min_exit_txt}{max_exit_txt}<br>"
+        f"{min_exit_txt}{max_exit_txt}\n"
     )
 
     return text
