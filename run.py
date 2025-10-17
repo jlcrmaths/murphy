@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-🤖 IBEX Murphy Adaptive Bot — Versión optimizada con memoria persistente
-Evita duplicados y garantiza coherencia entre señales BUY / SELL.
+🤖 IBEX Murphy Adaptive Bot — Versión alterna de escaneo
+Usa un conjunto diferente de estrategias para combinar señales.
+Memoria persistente y filtros idénticos a la versión principal.
 """
 
 import pandas as pd
@@ -14,17 +15,16 @@ from notifier import send_telegram_message, format_alert
 from recommender import decide_action, explain_action
 from positions_state import load_positions, save_positions, get_last_action, update_action
 
-# === Estrategias activas ===
-STRATEGIES = [
-    "strategies.murphy",
-    "strategies.macd_momentum",
-    "strategies.rsi_reversal",
+# === Estrategias alternas ===
+STRATEGIES_ALTERNA = [
+    "strategies.candle_ma_rsi",
+    "strategies.candle_sr_volume",
+    "strategies.candle_boll_rsi",
+    "strategies.engulfing",
+    "strategies.atr_breakout",
     "strategies.bollinger_rebound",
-    "strategies.ema_crossover",
-    "strategies.adx_trend",
-    "strategies.roc_momentum"
+    "strategies.rsi_reversal"
 ]
-# (Puedes añadir más si lo deseas)
 
 PAUSE_SEC = 0.25  # pausa corta entre estrategias
 
@@ -67,10 +67,9 @@ def combine_signals(signals: list) -> dict:
     latest["color"] = final_color
     return latest
 
-
 # === EJECUCIÓN PRINCIPAL ===
 print("=" * 60)
-print("🤖 IBEX Murphy Adaptive Bot — Inicio de escaneo")
+print("🤖 IBEX Murphy Adaptive Bot — Escaneo alterno")
 print("=" * 60)
 
 positions_df = load_positions()
@@ -83,7 +82,7 @@ for ticker in TICKERS:
         continue
 
     signals = []
-    for strat_path in STRATEGIES:
+    for strat_path in STRATEGIES_ALTERNA:
         try:
             module = importlib.import_module(strat_path)
             signal = module.generate_signal(df)
@@ -138,7 +137,7 @@ for ticker in TICKERS:
 
     send_telegram_message(f"📊 <b>{action}</b> → {explanation}\n\n{msg}")
 
-print("\n✅ Escaneo completado. Señales enviadas a Telegram (si aplicaba).")
+print("\n✅ Escaneo alterno completado. Señales enviadas a Telegram (si aplicaba).")
 print("=" * 60)
 print(f"🕒 Fin de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 print("=" * 60)
