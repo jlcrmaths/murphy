@@ -1,12 +1,11 @@
-# recommender.py
 # -*- coding: utf-8 -*-
 """
-🧠 Recommender mejorado con memoria de posiciones
-Decide la acción final (BUY, HOLD, SELL, NONE) en función de:
+Recommender mejorado con soporte para posiciones cortas.
+Decide acción final basada en:
 - color final (green/yellow/red)
-- tendencia (EMA)
+- tendencia EMA
 - RSI
-- y estado anterior (memoria en positions_state.csv)
+- estado anterior (memoria positions_state.csv)
 """
 
 import numpy as np
@@ -14,20 +13,22 @@ from positions_state import get_last_action, update_action, save_positions
 
 def decide_action(signal: dict, df, positions_df=None) -> str:
     """
-    Determina la acción a tomar basándose en la señal combinada, RSI y tendencia.
-    Si se proporciona positions_df, consulta el estado previo del ticker.
+    Determina la acción a tomar:
+    - BUY / SELL para posiciones largas
+    - SHORT / COVER para posiciones cortas
+    - HOLD / NONE si no hay consenso
     """
     ticker = signal.get("ticker", "UNKNOWN")
     color = signal.get("color", "red")
     last_action = get_last_action(ticker, positions_df) if positions_df is not None else "NONE"
 
-    # Calcular RSI y tendencia general
+    # EMA
     df = df.copy()
     df["ema_fast"] = df["close"].ewm(span=12, adjust=False).mean()
     df["ema_slow"] = df["close"].ewm(span=26, adjust=False).mean()
     trend_up = df["ema_fast"].iloc[-1] > df["ema_slow"].iloc[-1]
 
-    # RSI aproximado (14 periodos)
+    # RSI aproximado (14)
     delta = df["close"].diff()
     gain = delta.clip(lower=0).rolling(window=14).mean()
     loss = -delta.clip(upper=0).rolling(window=14).mean()
@@ -35,51 +36,45 @@ def decide_action(signal: dict, df, positions_df=None) -> str:
     rsi = 100 - (100 / (1 + rs))
     current_rsi = float(rsi[-1]) if not np.isnan(rsi[-1]) else 50.0
 
-    print(f"[Recommender] {ticker}: color={color}, trend={'up' if trend_up else 'down'}, RSI={current_rsi:.2f}, last={last_action}")
+    print(f"[RecommenderShort] {ticker}: color={color}, trend={'up' if trend_up else 'down'}, RSI={current_rsi:.2f}, last={last_action}")
 
-    # === Decisiones principales ===
     action = "NONE"
 
-    # 🔹 COMPRAR: color verde o fuerza + tendencia alcista
+    # === LARGO ===
     if color == "green" and trend_up and current_rsi < 75:
         action = "BUY"
-
-    # 🔹 MANTENER: señales amarillas o sobrecompra leve
     elif color == "yellow" or (70 <= current_rsi < 85 and trend_up):
         action = "HOLD"
-
-    # 🔹 VENDER: RSI alto o cruce bajista
     elif color == "red" and not trend_up and current_rsi > 70:
-        # Solo vender si se había comprado antes
         if last_action in ["BUY", "HOLD"]:
             action = "SELL"
         else:
-            action = "NONE"  # ignora ventas sin compra previa
+            # oportunidad de corto
+            if current_rsi > 70 and not trend_up:
+                action = "SHORT"
 
-    # 🔹 VIGILAR: sobrecompra fuerte pero aún en tendencia
-    elif current_rsi >= 85 and trend_up:
-        action = "HOLD"
+    # Recompra / cierre corto
+    if last_action == "SHORT":
+        if color == "green" and trend_up:
+            action = "COVER"  # cerrar corto y posible largo
+        elif current_rsi < 30:
+            action = "COVER"
 
-    # 🔹 RECOMPRA inteligente:
-    elif last_action in ["HOLD", "SELL"] and color == "green" and trend_up and current_rsi < 65:
-        action = "BUY"
-
-    # 🔹 Por defecto
-    else:
+    # Evitar señales sin consenso
+    if action not in ["BUY", "SELL", "SHORT", "COVER"]:
         action = "NONE"
 
     return action
 
-
 def explain_action(action: str) -> str:
-    """
-    Devuelve una explicación breve y comprensible del motivo de la acción.
-    """
     explanations = {
-        "BUY": "Tendencia alcista con confirmación de fuerza 📈",
-        "HOLD": "Zona de sobrecompra o consolidación — mantener vigilancia ⚠️",
-        "SELL": "Señal de agotamiento o cruce bajista detectado 🔻",
-        "NONE": "Sin consenso suficiente o mercado lateral ⚪"
+        "BUY": "Tendencia alcista confirmada 📈",
+        "HOLD": "Zona de consolidación o sobrecompra leve ⚠️",
+        "SELL": "Cerrar posición larga 🔻",
+        "SHORT": "Abrir posición corta ⬇️",
+        "COVER": "Cerrar posición corta ⬆️",
+        "NONE": "Sin consenso suficiente ⚪"
     }
     return explanations.get(action, "Sin explicación disponible.")
+
 
