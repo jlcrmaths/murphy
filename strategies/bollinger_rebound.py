@@ -2,6 +2,11 @@
 import pandas as pd
 
 def generate_signal(df: pd.DataFrame):
+    """
+    Estrategia de rebote/corrección usando Bandas de Bollinger:
+        - BUY si precio toca la banda inferior
+        - SELL si precio toca la banda superior
+    """
     df['sma'] = df['close'].rolling(20).mean()
     df['std'] = df['close'].rolling(20).std()
     df['upper'] = df['sma'] + 2 * df['std']
@@ -16,7 +21,8 @@ def generate_signal(df: pd.DataFrame):
             'tp': last['sma'],
             'sl': last['close'] * 0.97,
             'reason': 'Rebote en banda inferior',
-            'shares': 100
+            'shares': 100,
+            'color': 'green'
         }
 
     if last['close'] > last['upper']:
@@ -27,7 +33,9 @@ def generate_signal(df: pd.DataFrame):
             'tp': last['sma'],
             'sl': last['close'] * 1.03,
             'reason': 'Corrección desde banda superior',
-            'shares': 100
+            'shares': 100,
+            'color': 'red'
         }
 
     return None
+
