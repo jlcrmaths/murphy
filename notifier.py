@@ -1,31 +1,34 @@
+# notifier.py
 # -*- coding: utf-8 -*-
-import os
-import re
+"""
+📢 Envío de alertas por Telegram (modo HTML seguro)
+Evita errores de parseo de Markdown (como el caracter '.').
+"""
+
 import requests
 from typing import Dict
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_THREAD_ID
 
 API_URL = "https://api.telegram.org/bot{token}/{method}"
 
-# Leer de variables de entorno (provenientes del workflow)
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-TELEGRAM_THREAD_ID = os.getenv("TELEGRAM_THREAD_ID", None)
-
-
 def send_telegram_message(text: str) -> None:
-    """Envía un mensaje a Telegram, opcionalmente a un hilo de supergrupo."""
+    """
+    Envía un mensaje al canal o grupo configurado en Telegram.
+    Usa formato HTML para evitar errores de parseo con caracteres especiales.
+    """
     if TELEGRAM_BOT_TOKEN.startswith('PON_AQUI') or TELEGRAM_CHAT_ID.startswith('PON_AQUI'):
-        print('[Aviso] Configura TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (secrets/entorno).')
+        print('[Aviso] Configura TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en los secrets o entorno.')
         print(text)
         return
 
     payload = {
         'chat_id': TELEGRAM_CHAT_ID,
         'text': text,
-        'parse_mode': 'MarkdownV2'
+        'parse_mode': 'HTML'  # ✅ Modo HTML seguro
     }
+
     # Publicar en un tema (topic) de supergrupo (opcional)
-    if TELEGRAM_THREAD_ID is not None:
+    if TELEGRAM_THREAD_ID not in [None, '', '0']:
         payload['message_thread_id'] = TELEGRAM_THREAD_ID
 
     try:
@@ -40,32 +43,39 @@ def send_telegram_message(text: str) -> None:
         print('[Telegram] Excepción:', e)
 
 
-def escape_markdown(text: str) -> str:
-    """Escapa caracteres especiales de MarkdownV2 para que Telegram no rompa el mensaje."""
-    escape_chars = r"_*[]()~`>#+-=|{}.!$"
-    return re.sub(r"([{}])".format(re.escape(escape_chars)), r"\\\1", text)
-
-
 def format_alert(ticker: str, signal: Dict) -> str:
     """
-    Construye el texto de la alerta:
+    Construye el texto de la alerta en formato HTML:
     - ticker, hora
     - entrada, TP (arriba), SL (abajo)
     - nº de acciones y riesgo/acción
     - ventana temporal (min_exit, max_exit) si viene en signal
     """
+
+    def safe(x):  # Evita fallos si faltan datos
+        return x if x is not None else 'N/A'
+
     min_exit = signal.get('min_exit')
     max_exit = signal.get('max_exit')
-    min_exit_txt = '' if not min_exit else '\nNo cerrar antes de: `{}`'.format(min_exit)
-    max_exit_txt = '' if not max_exit else '\nCerrar como tarde: `{}`'.format(max_exit)
+    min_exit_txt = f"<br>No cerrar antes de: <code>{min_exit}</code>" if min_exit else ""
+    max_exit_txt = f"<br>Cerrar como tarde: <code>{max_exit}</code>" if max_exit else ""
 
-    return (
-        '*Señal LONG* en *{}*\n'.format(ticker) +
-        'Hora: `{}`\n'.format(signal['timestamp']) +
-        'Entrada: `{}`\n'.format(signal['entry']) +
-        'TP (arriba): `{}`\n'.format(signal['tp']) +
-        'SL (abajo): `{}`\n'.format(signal['sl']) +
-        'Nº acciones (presupuesto): `{}`\n'.format(signal['shares']) +
-        'Riesgo/acción: `{}`'.format(signal['risk_per_share']) +
-        min_exit_txt + max_exit_txt + '\n'
+    entry = safe(signal.get('entry'))
+    tp = safe(signal.get('tp'))
+    sl = safe(signal.get('sl'))
+    shares = safe(signal.get('shares'))
+    risk = safe(signal.get('risk_per_share'))
+
+    text = (
+        f"<b>Señal LONG</b> en <b>{ticker}</b><br>"
+        f"Hora: <code>{safe(signal.get('timestamp'))}</code><br>"
+        f"Entrada: <code>{entry}</code><br>"
+        f"TP (arriba): <code>{tp}</code><br>"
+        f"SL (abajo): <code>{sl}</code><br>"
+        f"Nº acciones (presupuesto): <code>{shares}</code><br>"
+        f"Riesgo/acción: <code>{risk}</code>"
+        f"{min_exit_txt}{max_exit_txt}<br>"
     )
+
+    return text
+
