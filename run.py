@@ -26,7 +26,7 @@ STRATEGIES = [
     "strategies.adx_trend",
     "strategies.atr_breakout",
     "strategies.roc_momentum",
-    "strategies.engulfing
+    "strategies.engulfing"
 ]
 
 PAUSE_SEC = 0.35
