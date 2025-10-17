@@ -1,8 +1,9 @@
 # positions_state.py
 # -*- coding: utf-8 -*-
 """
-Gestiona el estado actual de cada ticker (BUY, HOLD, SELL, NONE)
-para evitar señales incoherentes (por ejemplo, vender sin haber comprado).
+Gestiona el estado actual de cada ticker (BUY, HOLD, SELL, SHORT, COVER, NONE)
+para evitar señales incoherentes (por ejemplo, vender sin haber comprado
+o cubrir sin haber entrado en corto).
 """
 
 import os
@@ -37,6 +38,9 @@ def get_last_action(ticker: str, df: pd.DataFrame) -> str:
 
 # === Actualizar acción ===
 def update_action(ticker: str, action: str, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    action puede ser: BUY, HOLD, SELL, SHORT, COVER, NONE
+    """
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if ticker in df["ticker"].values:
         df.loc[df["ticker"] == ticker, ["last_action", "last_timestamp"]] = [action, now]
