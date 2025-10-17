@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-🤖 IBEX Murphy Adaptive Bot — Versión con recomendaciones automáticas
+🤖 IBEX Murphy Adaptive Bot — Versión con memoria de posiciones
+Evita señales incoherentes (por ejemplo, vender sin haber comprado antes).
 """
+
 import pandas as pd
 import importlib
 import time
+from datetime import datetime
 from data import download_bars
 from notifier import send_telegram_message, format_alert
 from recommender import decide_action, explain_action
+from positions_state import load_positions, save_positions, get_last_action, update_action
 
 # === Estrategias registradas ===
 STRATEGIES = [
@@ -56,7 +60,15 @@ def combine_signals(signals: list) -> dict:
     latest["color"] = final_color
     return latest
 
+
 # === Ejecución principal ===
+print("=" * 60)
+print(" 🤖 IBEX Murphy Adaptive Bot — Inicio de escaneo ")
+print("=" * 60)
+
+# Cargar memoria de posiciones
+positions_df = load_positions()
+
 for ticker in TICKERS:
     print(f"\n[Info] Escaneando {ticker} ...")
     df = download_bars(ticker)
@@ -84,30 +96,48 @@ for ticker in TICKERS:
         print(f"[Info] {ticker}: sin señales relevantes.")
         continue
 
-    # === Recomendador ===
     final_signal["ticker"] = ticker
     action = decide_action(final_signal, df)
+
+    # Consultar el estado previo del ticker
+    last_action = get_last_action(ticker, positions_df)
+
+    # === Filtros de coherencia ===
+    if action == "SELL" and last_action not in ["BUY", "HOLD"]:
+        print(f"[Filtro] {ticker}: SELL ignorado (no había posición previa).")
+        continue
+
+    if action == "BUY" and last_action in ["BUY", "HOLD"]:
+        print(f"[Filtro] {ticker}: BUY ignorado (ya en posición o seguimiento).")
+        continue
 
     if action == "NONE":
         print(f"[Recommender] {ticker} → ninguna acción tomada.")
         continue
 
+    # === Actualizar estado ===
+    positions_df = update_action(ticker, action, positions_df)
+    save_positions(positions_df)
+
+    # === Generar mensaje ===
     explanation = explain_action(action)
 
-    # === Mensaje seguro (sin KeyError) ===
     try:
         msg = format_alert(ticker, final_signal)
     except KeyError:
-        # Si falta algún campo, construimos un mensaje simplificado
         msg = (
-            f"*{action}* en *{ticker}*\n"
-            f"Hora: `{final_signal.get('timestamp', 'N/A')}`\n"
-            f"Estrategia: `{final_signal.get('strategy_name', 'desconocida')}`\n"
+            f"<b>{action}</b> en <b>{ticker}</b><br>"
+            f"Hora: <code>{final_signal.get('timestamp', 'N/A')}</code><br>"
+            f"Estrategia: <code>{final_signal.get('strategy_name', 'desconocida')}</code>"
         )
 
-    send_telegram_message(f"📊 *{action}* → {explanation}\n\n{msg}")
+    send_telegram_message(f"📊 <b>{action}</b> → {explanation}\n\n{msg}")
 
 print("\n✅ Escaneo finalizado. Resultados enviados a Telegram (si aplicaba).")
+print("=" * 60)
+print(" 🔚 Ejecución completada ")
+print("=" * 60)
+
 
 
 
