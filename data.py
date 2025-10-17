@@ -1,53 +1,53 @@
-# data.py
+# -*- coding: utf-8 -*-
 import warnings
-warnings.filterwarnings("ignore", category=FutureWarning, module="yfinance")
-
 import yfinance as yf
 import pandas as pd
 
-def download_bars(ticker, period="12mo", interval="1d"):
+# Ignorar warnings de futuro para YFinance
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
+def download_data(tickers, period="6mo", interval="1d", auto_adjust=True):
     """
-    Descarga datos históricos de Yahoo Finance para un ticker.
-    Devuelve un DataFrame con columnas:
-    ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+    Descarga los datos históricos de Yahoo Finance para una lista de tickers.
+    
+    :param tickers: Lista de símbolos (ej: ["AAPL", "MSFT"])
+    :param period: Período de descarga (ej: "6mo", "1y")
+    :param interval: Intervalo de datos (ej: "1d", "1h")
+    :param auto_adjust: True para precios ajustados, False para precios originales
+    :return: Diccionario con DataFrames por ticker
     """
-    print(f"[Info] Descargando datos para {ticker}...")
-
-    try:
-        df = yf.download(ticker, period=period, interval=interval, progress=False)
-    except Exception as e:
-        print(f"[Error] {ticker}: fallo en descarga ({e})")
-        return None
-
-    if df.empty:
-        print(f"[Advertencia] {ticker}: sin datos recientes.")
-        return None
-
-    # --- Aplanar MultiIndex si existiera ---
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [f"{a}_{b}".strip().lower() for a, b in df.columns]
+    if isinstance(tickers, str):
+        tickers = [tickers]
+    
+    # Descargar todos los tickers en paralelo
+    df_all = yf.download(
+        tickers,
+        period=period,
+        interval=interval,
+        progress=False,
+        auto_adjust=auto_adjust,
+        threads=True
+    )
+    
+    # Si solo es un ticker, yfinance devuelve un DataFrame simple
+    data_dict = {}
+    if len(tickers) == 1:
+        data_dict[tickers[0]] = df_all.reset_index()
     else:
-        df.columns = [c.lower() for c in df.columns]
+        # Para varios tickers, separar cada uno
+        for ticker in tickers:
+            if ticker in df_all.columns.levels[0]:
+                df_ticker = df_all[ticker].reset_index()
+                data_dict[ticker] = df_ticker
 
-    # --- Renombrar columnas ---
-    rename_map = {}
-    for c in df.columns:
-        if "open" in c: rename_map[c] = "open"
-        elif "high" in c: rename_map[c] = "high"
-        elif "low" in c: rename_map[c] = "low"
-        elif "close" in c: rename_map[c] = "close"
-        elif "volume" in c: rename_map[c] = "volume"
-    df = df.rename(columns=rename_map)
+    return data_dict
 
-    # --- Añadir columna timestamp ---
-    df["timestamp"] = df.index
-    df = df.reset_index(drop=True)
-
-    # --- Seleccionar columnas útiles ---
-    cols = ["timestamp", "open", "high", "low", "close", "volume"]
-    df = df[[c for c in cols if c in df.columns]]
-
-    return df
+# Ejemplo de uso
+if __name__ == "__main__":
+    tickers = ["AAPL", "MSFT", "GOOG"]
+    data = download_data(tickers, period="3mo", interval="1d", auto_adjust=True)
+    for t, df in data.items():
+        print(f"{t} -> {len(df)} filas")
 
 
 
