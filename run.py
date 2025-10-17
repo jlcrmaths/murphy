@@ -29,6 +29,7 @@ STRATEGIES = [
     "strategies.engulfing"
 ]
 
+
 PAUSE_SEC = 0.35
 
 # === Leer tickers ===
