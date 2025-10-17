@@ -3,6 +3,12 @@ import pandas as pd
 import numpy as np
 
 def generate_signal(df: pd.DataFrame):
+    """
+    Estrategia basada en:
+    - Cruce de EMAs
+    - Vela decisiva (cuerpo > 70% del rango)
+    - RSI moderado
+    """
     df = df.copy()
     df['ema_fast'] = df['close'].ewm(span=10, adjust=False).mean()
     df['ema_slow'] = df['close'].ewm(span=20, adjust=False).mean()
@@ -13,7 +19,7 @@ def generate_signal(df: pd.DataFrame):
 
     last, prev = df.iloc[-1], df.iloc[-2]
 
-    # patrón de vela: cuerpo mayor a 70% del rango → vela decisiva
+    # Patrón de vela: cuerpo mayor a 70% del rango → vela decisiva
     body = abs(last['close'] - last['open'])
     range_ = last['high'] - last['low']
     strong_candle = range_ > 0 and body / range_ > 0.7
@@ -27,7 +33,8 @@ def generate_signal(df: pd.DataFrame):
             'tp': last['close'] * 1.02,
             'sl': last['close'] * 0.98,
             'reason': 'Cruce de EMA con vela fuerte y RSI>40',
-            'shares': 100
+            'shares': 100,
+            'color': 'green'
         }
 
     # Cruce bajista con RSI alto y vela fuerte
@@ -39,7 +46,8 @@ def generate_signal(df: pd.DataFrame):
             'tp': last['close'] * 0.98,
             'sl': last['close'] * 1.02,
             'reason': 'Cruce de EMA con vela fuerte y RSI<60',
-            'shares': 100
+            'shares': 100,
+            'color': 'red'
         }
 
     return None
