@@ -2,6 +2,12 @@
 import pandas as pd
 
 def generate_signal(df: pd.DataFrame):
+    """
+    Estrategia basada en:
+    - Ruptura de soporte/resistencia
+    - Vela decisiva (cuerpo grande)
+    - Confirmación de volumen
+    """
     df = df.copy()
     df['vol_avg'] = df['volume'].rolling(20).mean()
     df['max20'] = df['high'].rolling(20).max()
@@ -9,7 +15,7 @@ def generate_signal(df: pd.DataFrame):
 
     last = df.iloc[-1]
 
-    # vela decisiva: cuerpo grande y volumen alto
+    # Vela decisiva: cuerpo grande y volumen alto
     body = abs(last['close'] - last['open'])
     range_ = last['high'] - last['low']
     strong_candle = range_ > 0 and body / range_ > 0.7
@@ -24,7 +30,8 @@ def generate_signal(df: pd.DataFrame):
             'tp': last['close'] * 1.015,
             'sl': last['close'] * 0.985,
             'reason': 'Ruptura de resistencia con volumen y vela fuerte',
-            'shares': 100
+            'shares': 100,
+            'color': 'green'
         }
 
     # Ruptura bajista de soporte con volumen
@@ -36,7 +43,9 @@ def generate_signal(df: pd.DataFrame):
             'tp': last['close'] * 0.985,
             'sl': last['close'] * 1.015,
             'reason': 'Ruptura de soporte con volumen y vela fuerte',
-            'shares': 100
+            'shares': 100,
+            'color': 'red'
         }
 
     return None
+
