@@ -22,7 +22,11 @@ STRATEGIES = [
     "strategies.ema_crossover",
     "strategies.candle_ma_rsi",
     "strategies.candle_sr_volume",
-    "strategies.candle_boll_rsi"
+    "strategies.candle_boll_rsi",
+    "strategies.adx_trend",
+    "strategies.atr_breakout",
+    "strategies.roc_momentum",
+    "strategies.engulfing
 ]
 
 PAUSE_SEC = 0.35
