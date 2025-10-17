@@ -2,11 +2,9 @@ name: ibex-murphy-scan
 
 on:
   schedule:
-    - cron: '*/30 7-15 * * 1-5'   # cada 30 min en horario de mercado
+    # Ejecutar cada 2 horas dentro de la ventana 09:30 - 21:30 CET (Madrid)
+    - cron: '30 9,11,13,15,17,19,21 * * 1-5'
   workflow_dispatch:
-
-permissions:
-  contents: write  # 🔑 necesario para poder hacer commits automáticos
 
 jobs:
   scan:
@@ -26,24 +24,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Ensure positions_state.csv exists
-        run: |
-          if [ ! -f positions_state.csv ]; then
-            echo "ticker,last_action,timestamp" > positions_state.csv
-            echo "[Init] positions_state.csv creado vacío."
-          fi
-
-      - name: Show files (debug)
-        run: |
-          echo "Files in repo:"
-          ls -R
-          echo "Head of run.py:"
-          head -n 20 run.py
-
-      - name: Syntax check
-        run: |
-          python -m py_compile notifier.py run.py data.py config.py strategy_manager.py strategy_performance.py || true
-          python -m py_compile strategies/*.py || true
+      - name: Cache positions_state.csv
+        uses: actions/cache@v4
+        with:
+          path: positions_state.csv
+          key: positions-${{ github.run_id }}
+          restore-keys: |
+            positions-
 
       - name: Run scan
         env:
@@ -53,15 +40,5 @@ jobs:
           TIMEZONE: "Europe/Madrid"
         run: |
           python run.py
-
-      # 🔄 Guardar el estado actualizado de posiciones
-      - name: Commit and push position state
-        if: success()
-        run: |
-          git config --global user.email "murphy-bot@github.com"
-          git config --global user.name "Murphy Bot"
-          git add positions_state.csv
-          git diff --staged --quiet || git commit -m "🤖 Update positions_state.csv [skip ci]"
-          git push
 
 
