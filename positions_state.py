@@ -1,106 +1,109 @@
+# positions_state.py
 # -*- coding: utf-8 -*-
 """
-📊 positions_state.py
-Gestiona el estado de las posiciones abiertas o vigiladas entre ejecuciones.
-Evita duplicar señales (por ejemplo, repetir un BUY o una alerta ya avisada).
+📊 Control de estado de posiciones y notificaciones
+Guarda, consulta y actualiza la última acción de cada ticker.
+Evita avisos repetidos en ejecuciones sucesivas del workflow de GitHub.
 """
 
 import os
 import pandas as pd
 from datetime import datetime
 
-FILE_PATH = "positions_state.csv"
+STATE_FILE = "positions_state.csv"
 
-# ================================================
-# 🔹 Cargar estado previo
-# ================================================
+
 def load_positions() -> pd.DataFrame:
-    if not os.path.exists(FILE_PATH):
-        df = pd.DataFrame(columns=["ticker", "last_action", "timestamp"])
-        df.to_csv(FILE_PATH, index=False)
-        return df
-
-    try:
-        df = pd.read_csv(FILE_PATH)
-        if df.empty or "ticker" not in df.columns:
-            df = pd.DataFrame(columns=["ticker", "last_action", "timestamp"])
-    except Exception:
-        df = pd.DataFrame(columns=["ticker", "last_action", "timestamp"])
+    """Carga el CSV de posiciones si existe, o crea uno vacío."""
+    if os.path.exists(STATE_FILE):
+        try:
+            df = pd.read_csv(STATE_FILE)
+            if "ticker" not in df.columns:
+                df = pd.DataFrame(columns=["ticker", "last_action", "last_signal", "last_update"])
+        except Exception:
+            df = pd.DataFrame(columns=["ticker", "last_action", "last_signal", "last_update"])
+    else:
+        df = pd.DataFrame(columns=["ticker", "last_action", "last_signal", "last_update"])
     return df
 
 
-# ================================================
-# 🔹 Obtener última acción registrada de un ticker
-# ================================================
-def get_last_action(ticker: str, df: pd.DataFrame = None) -> str:
-    if df is None:
-        df = load_positions()
-    if df.empty:
-        return "NONE"
+def save_positions(df: pd.DataFrame):
+    """Guarda el DataFrame actualizado en CSV."""
+    df.to_csv(STATE_FILE, index=False)
 
+
+def get_last_action(ticker: str, df: pd.DataFrame) -> str:
+    """Devuelve la última acción registrada para un ticker."""
     row = df[df["ticker"] == ticker]
-    if row.empty:
-        return "NONE"
+    if not row.empty:
+        return row.iloc[0]["last_action"]
+    return "NONE"
 
-    return str(row.iloc[-1]["last_action"]).upper()
+
+def get_last_signal(ticker: str, df: pd.DataFrame) -> str:
+    """Devuelve el último tipo de señal enviada (BUY, SELL, etc.) para el ticker."""
+    row = df[df["ticker"] == ticker]
+    if not row.empty:
+        return row.iloc[0]["last_signal"]
+    return None
 
 
-# ================================================
-# 🔹 Actualizar acción de un ticker
-# ================================================
-def update_action(ticker: str, action: str, df: pd.DataFrame = None) -> pd.DataFrame:
-    if df is None:
-        df = load_positions()
-
+def update_action(ticker: str, action: str, df: pd.DataFrame) -> pd.DataFrame:
+    """Actualiza o crea una nueva entrada para un ticker."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Si ya existe el ticker, se actualiza su última acción
     if ticker in df["ticker"].values:
-        df.loc[df["ticker"] == ticker, ["last_action", "timestamp"]] = [action, now]
+        df.loc[df["ticker"] == ticker, ["last_action", "last_signal", "last_update"]] = [action, action, now]
     else:
-        df = pd.concat([df, pd.DataFrame([[ticker, action, now]], columns=["ticker", "last_action", "timestamp"])], ignore_index=True)
+        df = pd.concat([df, pd.DataFrame([{
+            "ticker": ticker,
+            "last_action": action,
+            "last_signal": action,
+            "last_update": now
+        }])], ignore_index=True)
 
-    df.to_csv(FILE_PATH, index=False)
+    save_positions(df)
     return df
 
 
-# ================================================
-# 🔹 Guardar DataFrame completo (si ya lo tienes modificado)
-# ================================================
-def save_positions(df: pd.DataFrame):
-    df.to_csv(FILE_PATH, index=False)
-
-
-# ================================================
-# 🔹 Verificar si se debe notificar (evita avisos repetidos)
-# ================================================
-def should_notify(ticker: str, new_action: str, df: pd.DataFrame = None) -> bool:
+def should_notify(ticker: str, action: str, df: pd.DataFrame) -> bool:
     """
-    Devuelve True si hay un cambio relevante en la acción
-    y por tanto debe enviarse una nueva notificación.
+    Evita enviar notificaciones repetidas si ya se ha notificado la misma acción.
+    Devuelve True solo si la acción ha cambiado.
     """
-    last_action = get_last_action(ticker, df)
+    last_signal = get_last_signal(ticker, df)
+    return last_signal != action
 
-    # Evita repetir la misma señal (ej. BUY → BUY)
-    if new_action == last_action:
-        return False
 
-    # Si pasa de NONE a cualquier acción → notificar
-    if last_action == "NONE" and new_action != "NONE":
-        return True
+# ============================================================
+# Uso conjunto con recommender.py (flujo principal)
+# ============================================================
 
-    # Si cambia de BUY a SELL o viceversa → notificar
-    if (last_action in ["BUY", "HOLD"] and new_action == "SELL") or \
-       (last_action == "SELL" and new_action == "BUY"):
-        return True
+def process_signal_and_notify(ticker: str, action: str, notifier_func):
+    """
+    Controla si debe notificarse una acción y actualiza el estado.
+    - ticker: símbolo del activo
+    - action: BUY, SELL, HOLD, SHORT, COVER o NONE
+    - notifier_func: función externa que envía el mensaje (Telegram, etc.)
+    """
+    df = load_positions()
 
-    # Si cambia de LONG a SHORT o COVER → notificar
-    if (last_action == "SHORT" and new_action == "COVER") or \
-       (last_action == "COVER" and new_action == "SHORT"):
-        return True
+    if action == "NONE":
+        return  # no notificar acciones neutras
 
-    # Para otros cambios menores (ej. BUY → HOLD), puedes decidir si avisar
-    if new_action in ["HOLD", "COVER"] and last_action not in ["HOLD", new_action]:
-        return True
+    if should_notify(ticker, action, df):
+        notifier_func(ticker, action)  # envía mensaje a Telegram u otro canal
+        df = update_action(ticker, action, df)
+        print(f"[State] {ticker}: acción '{action}' registrada y notificada ✅")
+    else:
+        print(f"[State] {ticker}: acción '{action}' ya notificada recientemente, se omite ⚪")
 
-    return False
+
+# ============================================================
+# Inicialización (solo para uso manual/debug)
+# ============================================================
+
+if __name__ == "__main__":
+    df = load_positions()
+    print(df.head())
+
