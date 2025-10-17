@@ -29,7 +29,6 @@ STRATEGIES = [
     "strategies.engulfing"
 ]
 
-
 PAUSE_SEC = 0.35
 
 # === Leer tickers ===
@@ -61,7 +60,17 @@ def combine_signals(signals: list) -> dict:
     elif count_green == 1 or count_yellow >= 1:
         final_color = "yellow"
 
-    latest = max(signals, key=lambda s: s.get("timestamp", "1970-01-01"))
+    # Filtrar señales válidas con timestamp
+    valid_signals = [s for s in signals if s and "timestamp" in s]
+    if not valid_signals:
+        return None
+
+    # Convertir todo a Timestamp
+    for s in valid_signals:
+        if not isinstance(s["timestamp"], pd.Timestamp):
+            s["timestamp"] = pd.Timestamp(s["timestamp"])
+
+    latest = max(valid_signals, key=lambda s: s["timestamp"])
     latest["color"] = final_color
     return latest
 
@@ -142,6 +151,7 @@ print("\n✅ Escaneo finalizado. Resultados enviados a Telegram (si aplicaba).")
 print("=" * 60)
 print(" 🔚 Ejecución completada ")
 print("=" * 60)
+
 
 
 
